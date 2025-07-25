@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Local Grocery Flyers</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <style>
+    body { background: #f8f9fa; font-family: 'Inter', Arial, sans-serif; margin: 0; color: #222; }
+    .container { max-width: 900px; margin: 50px auto 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 12px #0001; padding: 28px; }
+    h1 { font-size: 2.2rem; margin-bottom: 10px; }
+    #searchSection { display: flex; gap: 10px; margin-bottom: 24px; }
+    #zipInput { padding: 10px 18px; font-size: 1rem; border: 1px solid #ddd; border-radius: 6px; width: 150px; }
+    #searchBtn { padding: 10px 22px; font-size: 1rem; background: #1368ce; color: #fff; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; }
+    #searchBtn:hover { background: #0b4e9c; }
+    #errorMsg { color: #c00; margin-bottom: 18px; }
+    #flyersGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 22px; margin-top: 28px; }
+    .flyer-card { background: #f7fafd; border-radius: 10px; box-shadow: 0 2px 8px #0001; padding: 16px 14px 18px 14px; display: flex; flex-direction: column; align-items: center; }
+    .flyer-card img { max-width: 100%; border-radius: 8px; margin-bottom: 12px; }
+    .flyer-title { font-size: 1.13rem; font-weight: 600; margin-bottom: 4px; text-align: center; }
+    .flyer-store { font-size: 1rem; color: #1368ce; margin-bottom: 6px; text-align: center; }
+    .flyer-dates { font-size: 0.98rem; color: #555; margin-bottom: 8px; }
+    .flyer-link { background: #1368ce; color: #fff; padding: 7px 18px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-top: 7px; }
+    .flyer-link:hover { background: #0b4e9c; }
+    @media (max-width: 700px) {
+      .container { padding: 10px; }
+      #flyersGrid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Find Local Grocery Flyers</h1>
+    <div id="searchSection">
+      <input type="text" id="zipInput" placeholder="Enter ZIP code" maxlength="10"/>
+      <button id="searchBtn">Find Flyers</button>
+    </div>
+    <div id="errorMsg"></div>
+    <div id="flyersGrid"></div>
+    <div style="margin-top:40px;color:#888;font-size:0.97em;">
+      <b>Note:</b> This website fetches flyer data via your own Node.js proxy.<br>
+      <a href="https://flipp.com/flyers" target="_blank" style="color:#1368ce;text-decoration:underline;">See more on Flipp.com</a>.
+    </div>
+  </div>
+  <script>
+    async function fetchFlyers(zip) {
+      // Now uses your local proxy!
+      const url = `http://localhost:3000/flyers?zip=${encodeURIComponent(zip)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Unable to fetch flyers (proxy/network error).");
+      const data = await res.json();
+      if (data['error']) throw new Error(data['error']);
+      if (!data || !data.flyers || !Array.isArray(data.flyers) || data.flyers.length === 0) {
+        throw new Error("No flyers found for this ZIP/postal code.");
+      }
+      // Only current flyers
+      const now = new Date();
+      return data.flyers.filter(f => {
+        const start = new Date(f.start_date);
+        const end = new Date(f.end_date);
+        return start <= now && end >= now;
+      });
+    }
+
+    function flyerCard(f) {
+      return `
+        <div class="flyer-card">
+          <img src="${f.flyer_thumbnail_url}" alt="Flyer for ${f.retailer_name}" loading="lazy"/>
+          <div class="flyer-title">${f.flyer_title || "Weekly Flyer"}</div>
+          <div class="flyer-store">${f.retailer_name}</div>
+          <div class="flyer-dates">${f.start_date} - ${f.end_date}</div>
+          <a class="flyer-link" href="https://flipp.com/flyers/${f.flyer_id}" target="_blank">View Flyer</a>
+        </div>
+      `;
+    }
+
+    async function onSearch() {
+      const zip = document.getElementById('zipInput').value.trim();
+      const errorMsg = document.getElementById('errorMsg');
+      const flyersGrid = document.getElementById('flyersGrid');
+      errorMsg.textContent = "";
+      flyersGrid.innerHTML = "";
+      if (!zip.match(/^[a-zA-Z0-9\- ]{3,10}$/)) {
+        errorMsg.textContent = "Please enter a valid ZIP or postal code.";
+        return;
+      }
+      flyersGrid.innerHTML = "<div>Loading flyers...</div>";
+      try {
+        const flyers = await fetchFlyers(zip);
+        if (flyers.length === 0) {
+          flyersGrid.innerHTML = "<div>No current flyers found for that ZIP code.</div>";
+          return;
+        }
+        flyersGrid.innerHTML = flyers.map(flyerCard).join("");
+      } catch (e) {
+        flyersGrid.innerHTML = "";
+        errorMsg.textContent = e.message;
+      }
+    }
+
+    document.getElementById('searchBtn').onclick = onSearch;
+    document.getElementById('zipInput').addEventListener("keypress", e => {
+      if (e.key === "Enter") onSearch();
+    });
+  </script>
+</body>
+</html>
